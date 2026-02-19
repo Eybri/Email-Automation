@@ -11,7 +11,9 @@ import {
   AlertCircle,
   Eye,
   Plus,
-  LucideIcon
+  LucideIcon,
+  FileText,
+  X
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
@@ -53,12 +55,14 @@ export default function Dashboard() {
   const [rows, setRows] = useState<RecipientData[]>([]);
   const [subject, setSubject] = useState("");
   const [template, setTemplate] = useState("");
+  const [pdfFiles, setPdfFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [results, setResults] = useState<SendResult[] | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("upload");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = e.target.files?.[0];
@@ -83,6 +87,16 @@ export default function Dashboard() {
     }
   };
 
+  const handlePdfSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    setPdfFiles((prev) => [...prev, ...files]);
+    if (pdfInputRef.current) pdfInputRef.current.value = "";
+  };
+
+  const removePdf = (index: number) => {
+    setPdfFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const insertPlaceholder = (header: string) => {
     const placeholder = `{${header}}`;
     setTemplate((prev) => prev + placeholder);
@@ -97,17 +111,27 @@ export default function Dashboard() {
     setIsSending(true);
     setResults(null);
 
+    const formData = new FormData();
+    formData.append("subject", subject);
+    formData.append("template", template);
+    formData.append("recipients", JSON.stringify(rows));
+
+    pdfFiles.forEach((file) => {
+      formData.append("attachments", file);
+    });
+
     try {
-      const response = await axios.post(`${API_BASE_URL}/email/send`, {
-        subject,
-        template,
-        recipients: rows,
+      const response = await axios.post(`${API_BASE_URL}/email/send`, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
       });
       setResults(response.data.results);
       setActiveTab("preview");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Sending failed", error);
-      alert("Failed to send emails.");
+      const msg = error.response?.data?.message || (error.response?.data?.error ? `${error.response.data.error}: ${error.response.data.message || ''}` : error.message);
+      alert(`Failed to send emails: ${msg}`);
     } finally {
       setIsSending(false);
     }
@@ -133,8 +157,8 @@ export default function Dashboard() {
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`flex items-center space-x-2 px-6 py-3 rounded-full transition-all duration-300 ${activeTab === tab.id
-                ? "bg-blue-600 text-white shadow-lg shadow-blue-900/40"
-                : "bg-black/40 text-neutral-500 hover:text-neutral-300"
+              ? "bg-blue-600 text-white shadow-lg shadow-blue-900/40"
+              : "bg-black/40 text-neutral-500 hover:text-neutral-300"
               }`}
           >
             <tab.icon className="w-5 h-5" />
@@ -211,11 +235,45 @@ export default function Dashboard() {
                       />
                     </div>
                   </div>
+
+                  {/* PDF Attachments Section */}
+                  <div className="pt-8">
+                    <label className="block text-sm font-medium text-neutral-400 mb-4">PDF Attachments</label>
+                    <div className="flex flex-wrap gap-4">
+                      {pdfFiles.map((pdf, index) => (
+                        <div key={index} className="flex items-center space-x-2 bg-neutral-900 px-4 py-2 rounded-xl group relative border border-neutral-800">
+                          <FileText className="w-5 h-5 text-rose-500" />
+                          <span className="text-sm truncate max-w-[150px]">{pdf.name}</span>
+                          <button
+                            onClick={() => removePdf(index)}
+                            className="text-neutral-500 hover:text-rose-500 transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => pdfInputRef.current?.click()}
+                        className="flex items-center space-x-2 bg-neutral-900/50 hover:bg-neutral-800 border-2 border-dashed border-neutral-700 hover:border-blue-500 px-4 py-2 rounded-xl text-neutral-500 hover:text-blue-400 transition-all cursor-pointer"
+                      >
+                        <Plus className="w-5 h-5" />
+                        <span className="text-sm font-medium">Add PDF</span>
+                        <input
+                          type="file"
+                          ref={pdfInputRef}
+                          onChange={handlePdfSelection}
+                          className="hidden"
+                          accept=".pdf"
+                          multiple
+                        />
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="space-y-4">
                   <h4 className="text-sm font-semibold uppercase tracking-wider text-neutral-500">Available Placeholders</h4>
-                  <div className="bg-neutral-900/50 rounded-2xl p-4 border border-neutral-800/50 space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar">
+                  <div className="bg-neutral-900/50 rounded-2xl p-4 border border-neutral-800/50 space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
                     {headers.length > 0 ? (
                       headers.map((header) => (
                         <button

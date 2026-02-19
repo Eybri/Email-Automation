@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+@theme {
+  --color-border: var(--border);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-ring: var(--ring);
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0.045 235.253);
+  --primary: oklch(0.245 0.058 252.785);
+  --primary-foreground: oklch(0.985 0.001 106.423);
+  --secondary: oklch(0.967 0.003 264.542);
+  --secondary-foreground: oklch(0.245 0.058 252.785);
+  --muted: oklch(0.967 0.003 264.542);
+  --muted-foreground: oklch(0.552 0.016 285.938);
+  --accent: oklch(0.967 0.003 264.542);
+  --accent-foreground: oklch(0.245 0.058 252.785);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.577 0.245 27.325);
+  --border: oklch(0.92 0.004 286.32);
+  --ring: oklch(0.705 0.015 286.067);
+}
+
+.dark {
+  --background: oklch(0.145 0.045 235.253);
+  --foreground: oklch(0.985 0.001 106.423);
+  --primary: oklch(0.985 0.001 106.423);
+  --primary-foreground: oklch(0.245 0.058 252.785);
+  --secondary: oklch(0.268 0.034 264.665);
+  --secondary-foreground: oklch(0.985 0.001 106.423);
+  --muted: oklch(0.268 0.034 264.665);
+  --muted-foreground: oklch(0.705 0.015 286.067);
+  --accent: oklch(0.268 0.034 264.665);
+  --accent-foreground: oklch(0.985 0.001 106.423);
+  --destructive: oklch(0.396 0.141 25.723);
+  --destructive-foreground: oklch(0.637 0.237 25.331);
+  --border: oklch(0.268 0.034 264.665);
+  --ring: oklch(0.442 0.138 242.49);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.premium-gradient {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+}

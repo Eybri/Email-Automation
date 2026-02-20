@@ -68,6 +68,8 @@ export default function Dashboard() {
   const [isSending, setIsSending] = useState(false);
   const [results, setResults] = useState<SendResult[] | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("upload");
+  const [startRow, setStartRow] = useState(1);
+  const [endRow, setEndRow] = useState(0);
   const [fallbackValues, setFallbackValues] = useState<Record<string, string>>({});
   const [editingCell, setEditingCell] = useState<{ row: number; col: string } | null>(null);
 
@@ -104,6 +106,8 @@ export default function Dashboard() {
       });
       setHeaders(response.data.headers);
       setRows(response.data.rows);
+      setStartRow(1);
+      setEndRow(response.data.rows.length);
       setActiveTab("editor");
     } catch (error: any) {
       console.error("Upload failed", error);
@@ -133,7 +137,9 @@ export default function Dashboard() {
   };
 
   // Check if a cell value is empty
-  const isEmpty = (value: any) => !value || String(value).trim() === "";
+  // Check if a cell value is truly empty (null, undefined, or empty string)
+  // Numeric 0 is NOT empty.
+  const isEmpty = (value: any) => value === undefined || value === null || String(value).trim() === "";
 
   // Get columns that have at least one empty cell
   const columnsWithEmptyCells = headers.filter((header) =>
@@ -143,8 +149,8 @@ export default function Dashboard() {
   // Get the display value for a cell: original value or fallback (transparently)
   const getCellDisplay = (row: RecipientData, col: string) => {
     if (!isEmpty(row[col])) return { value: String(row[col]), isFallback: false };
-    if (fallbackValues[col]) return { value: fallbackValues[col], isFallback: true };
-    return { value: "—", isFallback: false };
+    if (!isEmpty(fallbackValues[col])) return { value: fallbackValues[col], isFallback: true };
+    return { value: "", isFallback: false };
   };
 
   // Update a specific cell value
@@ -155,9 +161,13 @@ export default function Dashboard() {
     setEditingCell(null);
   };
 
-  // Merge fallback values into rows for sending
+  // Merge fallback values into rows for sending, respecting selection range
   const getRecipientsWithFallbacks = () => {
-    return rows.map((row) => {
+    // Zero-based indexing for slice: startRow is inclusive, endRow is exclusive
+    // But we want endRow to be inclusive as well for the user
+    const selectedRows = rows.slice(startRow - 1, endRow);
+
+    return selectedRows.map((row) => {
       const merged = { ...row };
       for (const col of headers) {
         if (isEmpty(merged[col]) && fallbackValues[col]) {
@@ -348,6 +358,40 @@ export default function Dashboard() {
                       )}
                     </div>
 
+                    {/* Row Scope Selection */}
+                    <div className="flex items-center gap-4 bg-neutral-800/50 p-3 rounded-xl border border-neutral-700/50">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Row Scope:</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
+                          <label className="text-[10px] text-neutral-500 uppercase">Start</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={endRow}
+                            value={startRow}
+                            onChange={(e) => setStartRow(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-16 bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-xs text-blue-400 font-mono focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <label className="text-[10px] text-neutral-500 uppercase">End</label>
+                          <input
+                            type="number"
+                            min={startRow}
+                            max={rows.length}
+                            value={endRow}
+                            onChange={(e) => setEndRow(Math.min(rows.length, parseInt(e.target.value) || 0))}
+                            className="w-16 bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-xs text-blue-400 font-mono focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+                        <span className="text-xs text-neutral-600">
+                          of {rows.length} total
+                        </span>
+                      </div>
+                    </div>
+
                     <div className="overflow-x-auto rounded-xl border border-neutral-800 custom-scrollbar">
                       <table className="w-full text-sm">
                         <thead>
@@ -523,7 +567,7 @@ export default function Dashboard() {
                       ) : (
                         <>
                           <Send className="w-5 h-5" />
-                          <span>Send to {rows.length} Recipients</span>
+                          <span>Send to {Math.max(0, endRow - startRow + 1)} Recipients</span>
                         </>
                       )}
                     </button>

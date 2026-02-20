@@ -25,9 +25,15 @@ export class EmailService {
 
             // Replace placeholders in subject and body
             Object.keys(recipient).forEach((key) => {
-                const placeholder = new RegExp(`{${key}}`, 'g');
-                personalizedBody = personalizedBody.replace(placeholder, String(recipient[key] || ''));
-                personalizedSubject = personalizedSubject.replace(placeholder, String(recipient[key] || ''));
+                // Escape key for RegExp in case it contains special characters
+                const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const placeholder = new RegExp(`{${escapedKey}}`, 'g');
+
+                // Use ?? to allow numeric 0 as a valid value
+                const value = String(recipient[key] ?? '');
+
+                personalizedBody = personalizedBody.replace(placeholder, value);
+                personalizedSubject = personalizedSubject.replace(placeholder, value);
             });
 
             try {

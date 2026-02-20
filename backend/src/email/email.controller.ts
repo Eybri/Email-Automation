@@ -16,7 +16,7 @@ export class EmailController {
     ) { }
 
     @Post('upload')
-    @UseInterceptors(FilesInterceptor('file'))
+    @UseInterceptors(FilesInterceptor('files'))
     async uploadFile(
         @UploadedFiles() files: Express.Multer.File[],
         @Req() req: any,

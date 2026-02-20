@@ -69,13 +69,14 @@ export default function Dashboard() {
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [results, setResults] = useState<SendResult[] | null>(null);
+  const [results, setResults] = useState<SendResult[]>([]);
   const [activeTab, setActiveTab] = useState<Tab>("upload");
   const [startRow, setStartRow] = useState(1);
   const [endRow, setEndRow] = useState(0);
   const [fallbackValues, setFallbackValues] = useState<Record<string, string>>({});
   const [editingCell, setEditingCell] = useState<{ row: number; col: string } | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [sendingLogs, setSendingLogs] = useState<string[]>([]);
 
   const quillModules = {
     clipboard: {
@@ -234,35 +235,65 @@ export default function Dashboard() {
     }
 
     setIsSending(true);
-    setResults(null);
+    setResults([]);
+    setSendingLogs(["Initializing sending process...", `Target: ${Math.max(0, endRow - startRow + 1)} recipients.`]);
+    setActiveTab("preview"); // Switch to preview tab to show logs
 
-    const formData = new FormData();
-    formData.append("subject", subject);
-    formData.append("template", template);
-    formData.append("recipients", JSON.stringify(getRecipientsWithFallbacks()));
-
-    attachments.forEach((file) => {
-      formData.append("attachments", file);
-    });
+    const allRecipients = getRecipientsWithFallbacks();
+    const BATCH_SIZE = 5;
+    const totalBatches = Math.ceil(allRecipients.length / BATCH_SIZE);
+    let allResults: SendResult[] = [];
 
     try {
       const authHeaders = await getAuthHeaders();
-      const response = await axios.post(`${API_BASE_URL}/email/send`, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-          ...authHeaders,
-        },
-      });
-      setResults(response.data.results);
-      setActiveTab("preview");
-    } catch (error: any) {
-      console.error("Sending failed", error);
-      if (error.response?.status === 401) {
-        router.push("/login");
-        return;
+
+      for (let i = 0; i < allRecipients.length; i += BATCH_SIZE) {
+        const chunk = allRecipients.slice(i, i + BATCH_SIZE);
+        const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+
+        setSendingLogs(prev => [...prev, `[Batch ${batchNum}/${totalBatches}] Processing ${chunk.length} emails...`]);
+
+        const formData = new FormData();
+        formData.append("subject", subject);
+        formData.append("template", template);
+        formData.append("recipients", JSON.stringify(chunk));
+
+        attachments.forEach((file) => {
+          formData.append("attachments", file);
+        });
+
+        try {
+          const response = await axios.post(`${API_BASE_URL}/email/send`, formData, {
+            headers: {
+              ...authHeaders,
+              "Content-Type": "multipart/form-data",
+            },
+          });
+
+          const batchResults: SendResult[] = response.data.results;
+          allResults = [...allResults, ...batchResults];
+          setResults([...allResults]); // Live update results list
+
+          batchResults.forEach(res => {
+            const statusIcon = res.status === 'sent' ? '✅' : '❌';
+            const logMsg = `${statusIcon} ${res.status === 'sent' ? 'Sent' : 'Failed'}: ${res.email}${res.error ? ` (${res.error})` : ''}`;
+            setSendingLogs(prev => [...prev, logMsg]);
+          });
+
+        } catch (batchErr: any) {
+          const errorMsg = batchErr.response?.data?.message || batchErr.message;
+          setSendingLogs(prev => [...prev, `❌ Batch error: ${errorMsg}`]);
+          // Add dummy failures for the chunk to keep results consistent
+          const failChunk = chunk.map(r => ({ email: r.email || r.Email || 'Unknown', status: 'failed' as const, error: errorMsg }));
+          allResults = [...allResults, ...failChunk];
+          setResults([...allResults]);
+        }
       }
-      const msg = error.response?.data?.message || (error.response?.data?.error ? `${error.response.data.error}: ${error.response.data.message || ''}` : error.message);
-      alert(`Failed to send emails: ${msg}`);
+
+      setSendingLogs(prev => [...prev, "🏁 Sending process completed."]);
+    } catch (error: any) {
+      console.error("Bulk send failed", error);
+      setSendingLogs(prev => [...prev, `🛑 Critical error: ${error.message}`]);
     } finally {
       setIsSending(false);
     }
@@ -682,35 +713,93 @@ export default function Dashboard() {
               exit={{ opacity: 0, x: -20 }}
               className="space-y-6"
             >
-              <div className="flex items-center justify-between mb-8">
-                <h3 className="text-2xl font-bold">Execution Status</h3>
-                <div className="flex space-x-4">
-                  <div className="bg-emerald-500/10 text-emerald-400 px-4 py-1 rounded-full border border-emerald-500/20 text-sm font-medium">
-                    {results?.filter(r => r.status === 'sent').length || 0} Sent
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-2xl font-bold">execution_status.log</h3>
+                <div className="flex space-x-3">
+                  <div className="bg-emerald-500/10 text-emerald-400 px-4 py-1.5 rounded-full border border-emerald-500/20 text-xs font-mono">
+                    {results.filter(r => r.status === 'sent').length} SUCCESS
                   </div>
-                  <div className="bg-rose-500/10 text-rose-400 px-4 py-1 rounded-full border border-rose-500/20 text-sm font-medium">
-                    {results?.filter(r => r.status === 'failed').length || 0} Failed
+                  <div className="bg-rose-500/10 text-rose-400 px-4 py-1.5 rounded-full border border-rose-500/20 text-xs font-mono">
+                    {results.filter(r => r.status === 'failed').length} ERROR
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                {results ? (
-                  results.map((result, idx) => (
-                    <div key={idx} className="flex items-center justify-between bg-neutral-900/50 p-4 rounded-xl border border-neutral-800">
-                      <div className="flex items-center space-x-4">
-                        <div className={`p-2 rounded-full ${result.status === 'sent' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
-                          {result.status === 'sent' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
-                        </div>
-                        <span className="font-medium">{result.email}</span>
+              {/* Terminal View (Visible while sending or if logs exist) */}
+              {(isSending || sendingLogs.length > 0) && (
+                <div className="bg-black/80 rounded-2xl border border-neutral-800 p-4 font-mono text-[11px] leading-relaxed overflow-hidden flex flex-col h-[300px]">
+                  <div className="flex items-center gap-2 mb-3 border-b border-neutral-800 pb-2">
+                    <div className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                    <span className="text-neutral-500 ml-2">Progress Monitor</span>
+                  </div>
+                  <div className="overflow-y-auto flex-1 custom-scrollbar pr-2 space-y-1">
+                    {sendingLogs.map((log, i) => (
+                      <div key={i} className="text-neutral-400">
+                        <span className="text-neutral-600 mr-2">[{new Date().toLocaleTimeString([], { hour12: false })}]</span>
+                        {log}
                       </div>
-                      {result.error && <span className="text-xs text-rose-500 italic max-w-xs truncate">{result.error}</span>}
+                    ))}
+                    {isSending && <div className="text-blue-400 animate-pulse">_ Waiting for server response...</div>}
+                    <div ref={(el) => el?.scrollIntoView({ behavior: 'smooth' })} />
+                  </div>
+                </div>
+              )}
+
+              {/* Detailed Summary (Only after finished) */}
+              {!isSending && results.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Sent Successfully */}
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-semibold text-emerald-500 uppercase tracking-widest flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Success Delivery
+                    </h4>
+                    <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
+                      {results.filter(r => r.status === 'sent').map((res, i) => (
+                        <div key={i} className="bg-neutral-900/40 border border-neutral-800/50 p-3 rounded-xl flex items-center gap-3">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-500/60" />
+                          <span className="text-sm text-neutral-300">{res.email}</span>
+                        </div>
+                      ))}
+                      {results.filter(r => r.status === 'sent').length === 0 && (
+                        <p className="text-xs text-neutral-600 italic">No emails sent successfully.</p>
+                      )}
                     </div>
-                  ))
-                ) : (
-                  <div className="text-center py-12 text-neutral-600 italic">No results to show.</div>
-                )}
-              </div>
+                  </div>
+
+                  {/* Failed / Errors */}
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-semibold text-rose-500 uppercase tracking-widest flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4" />
+                      Not Found / Errors
+                    </h4>
+                    <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
+                      {results.filter(r => r.status === 'failed').map((res, i) => (
+                        <div key={i} className="bg-rose-500/5 border border-rose-500/10 p-3 rounded-xl flex flex-col gap-1">
+                          <div className="flex items-center gap-3">
+                            <AlertCircle className="w-4 h-4 text-rose-500/60" />
+                            <span className="text-sm text-neutral-300">{res.email}</span>
+                          </div>
+                          {res.error && <span className="text-[10px] text-rose-400/70 ml-7 italic">{res.error}</span>}
+                        </div>
+                      ))}
+                      {results.filter(r => r.status === 'failed').length === 0 && (
+                        <p className="text-xs text-neutral-600 italic">No delivery failures reported.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!isSending && results.length === 0 && (
+                <div className="text-center py-20 border-2 border-dashed border-neutral-800 rounded-3xl">
+                  <Eye className="w-12 h-12 text-neutral-800 mx-auto mb-4" />
+                  <p className="text-neutral-500 font-medium">No execution history found.</p>
+                  <p className="text-xs text-neutral-600">Start sending emails to see real-time logs and results.</p>
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

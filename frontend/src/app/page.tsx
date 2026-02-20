@@ -67,6 +67,8 @@ export default function Dashboard() {
   const [isSending, setIsSending] = useState(false);
   const [results, setResults] = useState<SendResult[] | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("upload");
+  const [fallbackValues, setFallbackValues] = useState<Record<string, string>>({});
+  const [editingCell, setEditingCell] = useState<{ row: number; col: string } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
@@ -129,6 +131,42 @@ export default function Dashboard() {
     setTemplate((prev) => prev + placeholder);
   };
 
+  // Check if a cell value is empty
+  const isEmpty = (value: any) => !value || String(value).trim() === "";
+
+  // Get columns that have at least one empty cell
+  const columnsWithEmptyCells = headers.filter((header) =>
+    rows.some((row) => isEmpty(row[header]))
+  );
+
+  // Get the display value for a cell: original value or fallback (transparently)
+  const getCellDisplay = (row: RecipientData, col: string) => {
+    if (!isEmpty(row[col])) return { value: String(row[col]), isFallback: false };
+    if (fallbackValues[col]) return { value: fallbackValues[col], isFallback: true };
+    return { value: "—", isFallback: false };
+  };
+
+  // Update a specific cell value
+  const updateCellValue = (rowIdx: number, col: string, value: string) => {
+    setRows((prev) =>
+      prev.map((row, i) => (i === rowIdx ? { ...row, [col]: value } : row))
+    );
+    setEditingCell(null);
+  };
+
+  // Merge fallback values into rows for sending
+  const getRecipientsWithFallbacks = () => {
+    return rows.map((row) => {
+      const merged = { ...row };
+      for (const col of headers) {
+        if (isEmpty(merged[col]) && fallbackValues[col]) {
+          merged[col] = fallbackValues[col];
+        }
+      }
+      return merged;
+    });
+  };
+
   const handleSendEmails = async () => {
     if (!subject || !template || rows.length === 0) {
       alert("Please ensure subject, template, and recipients are ready.");
@@ -141,7 +179,7 @@ export default function Dashboard() {
     const formData = new FormData();
     formData.append("subject", subject);
     formData.append("template", template);
-    formData.append("recipients", JSON.stringify(rows));
+    formData.append("recipients", JSON.stringify(getRecipientsWithFallbacks()));
 
     pdfFiles.forEach((file) => {
       formData.append("attachments", file);
@@ -294,98 +332,197 @@ export default function Dashboard() {
               exit={{ opacity: 0, x: -20 }}
               className="space-y-6"
             >
-              <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-                <div className="lg:col-span-3 space-y-6">
-                  <div>
-                    <label className="block text-sm font-medium text-neutral-400 mb-2">Email Subject</label>
-                    <input
-                      value={subject}
-                      onChange={(e) => setSubject(e.target.value)}
-                      placeholder="e.g. Hello {Name}, here is your offer!"
-                      className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all"
-                    />
-                  </div>
+              <div className="space-y-6">
+                {/* Fallback Values & Data Preview */}
+                {rows.length > 0 && (
+                  <div className="bg-neutral-900/30 border border-neutral-800/50 rounded-2xl p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-semibold text-neutral-300 flex items-center gap-2">
+                        <FileSpreadsheet className="w-4 h-4 text-blue-400" />
+                        Data Preview
+                        <span className="text-xs font-normal text-neutral-600">({rows.length} rows)</span>
+                      </h4>
+                      {columnsWithEmptyCells.length > 0 && (
+                        <span className="text-xs text-amber-500">{columnsWithEmptyCells.length} column(s) have empty cells</span>
+                      )}
+                    </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-neutral-400 mb-2">Email Body</label>
-                    <div className="bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800">
-                      <ReactQuill
-                        theme="snow"
-                        value={template}
-                        onChange={setTemplate}
-                        style={{ height: '300px', background: 'transparent' }}
+                    <div className="overflow-x-auto rounded-xl border border-neutral-800 custom-scrollbar">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-neutral-800 bg-neutral-900/80">
+                            <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-500 w-10">#</th>
+                            {headers.map((h) => (
+                              <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-neutral-400">{h}</th>
+                            ))}
+                          </tr>
+                          {/* Fallback input row */}
+                          {columnsWithEmptyCells.length > 0 && (
+                            <tr className="border-b border-amber-500/20 bg-amber-500/5">
+                              <td className="px-3 py-2 text-xs text-amber-500 font-medium">↳</td>
+                              {headers.map((h) => (
+                                <td key={h} className="px-2 py-1.5">
+                                  {columnsWithEmptyCells.includes(h) ? (
+                                    <input
+                                      type="text"
+                                      value={fallbackValues[h] || ""}
+                                      onChange={(e) => setFallbackValues((prev) => ({ ...prev, [h]: e.target.value }))}
+                                      placeholder="Fallback"
+                                      className="w-full bg-neutral-900/80 border border-amber-500/30 rounded px-2 py-1 text-xs text-amber-300 placeholder:text-neutral-700 focus:ring-1 focus:ring-amber-500/50 focus:outline-none"
+                                    />
+                                  ) : (
+                                    <span className="text-xs text-neutral-700">—</span>
+                                  )}
+                                </td>
+                              ))}
+                            </tr>
+                          )}
+                        </thead>
+                        <tbody>
+                          {rows.slice(0, 20).map((row, idx) => (
+                            <tr key={idx} className="border-b border-neutral-800/50 hover:bg-neutral-800/30 transition-colors">
+                              <td className="px-3 py-2 text-xs text-neutral-600">{idx + 1}</td>
+                              {headers.map((h) => {
+                                const cell = getCellDisplay(row, h);
+                                const isEditing = editingCell?.row === idx && editingCell?.col === h;
+                                return (
+                                  <td
+                                    key={h}
+                                    className={`text-xs cursor-pointer ${isEditing
+                                      ? "p-0"
+                                      : `px-3 py-2 ${cell.isFallback
+                                        ? "text-amber-400/70 italic bg-amber-500/5"
+                                        : isEmpty(row[h])
+                                          ? "text-neutral-700"
+                                          : "text-neutral-300"
+                                      }`
+                                      }`}
+                                    onDoubleClick={() => setEditingCell({ row: idx, col: h })}
+                                  >
+                                    {isEditing ? (
+                                      <input
+                                        type="text"
+                                        autoFocus
+                                        defaultValue={String(row[h] ?? "")}
+                                        className="w-full bg-neutral-800 border border-blue-500 rounded px-2 py-1.5 text-xs text-white focus:outline-none"
+                                        onBlur={(e) => updateCellValue(idx, h, e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") updateCellValue(idx, h, (e.target as HTMLInputElement).value);
+                                          if (e.key === "Escape") setEditingCell(null);
+                                        }}
+                                      />
+                                    ) : (
+                                      cell.value
+                                    )}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {rows.length > 20 && (
+                        <div className="text-center py-2 text-xs text-neutral-600 bg-neutral-900/50">
+                          Showing 20 of {rows.length} rows
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                  <div className="lg:col-span-3 space-y-6">
+                    <div>
+                      <label className="block text-sm font-medium text-neutral-400 mb-2">Email Subject</label>
+                      <input
+                        value={subject}
+                        onChange={(e) => setSubject(e.target.value)}
+                        placeholder="e.g. Hello {Name}, here is your offer!"
+                        className="w-full bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all"
                       />
                     </div>
-                  </div>
 
-                  {/* PDF Attachments Section */}
-                  <div className="pt-8">
-                    <label className="block text-sm font-medium text-neutral-400 mb-4">PDF Attachments</label>
-                    <div className="flex flex-wrap gap-4">
-                      {pdfFiles.map((pdf, index) => (
-                        <div key={index} className="flex items-center space-x-2 bg-neutral-900 px-4 py-2 rounded-xl group relative border border-neutral-800">
-                          <FileText className="w-5 h-5 text-rose-500" />
-                          <span className="text-sm truncate max-w-[150px]">{pdf.name}</span>
-                          <button
-                            onClick={() => removePdf(index)}
-                            className="text-neutral-500 hover:text-rose-500 transition-colors"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                      <button
-                        onClick={() => pdfInputRef.current?.click()}
-                        className="flex items-center space-x-2 bg-neutral-900/50 hover:bg-neutral-800 border-2 border-dashed border-neutral-700 hover:border-blue-500 px-4 py-2 rounded-xl text-neutral-500 hover:text-blue-400 transition-all cursor-pointer"
-                      >
-                        <Plus className="w-5 h-5" />
-                        <span className="text-sm font-medium">Add PDF</span>
-                        <input
-                          type="file"
-                          ref={pdfInputRef}
-                          onChange={handlePdfSelection}
-                          className="hidden"
-                          accept=".pdf"
-                          multiple
+                    <div>
+                      <label className="block text-sm font-medium text-neutral-400 mb-2">Email Body</label>
+                      <div className="bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800">
+                        <ReactQuill
+                          theme="snow"
+                          value={template}
+                          onChange={setTemplate}
+                          style={{ height: '300px', background: 'transparent' }}
                         />
-                      </button>
+                      </div>
+                    </div>
+
+                    {/* PDF Attachments Section */}
+                    <div className="pt-8">
+                      <label className="block text-sm font-medium text-neutral-400 mb-4">PDF Attachments</label>
+                      <div className="flex flex-wrap gap-4">
+                        {pdfFiles.map((pdf, index) => (
+                          <div key={index} className="flex items-center space-x-2 bg-neutral-900 px-4 py-2 rounded-xl group relative border border-neutral-800">
+                            <FileText className="w-5 h-5 text-rose-500" />
+                            <span className="text-sm truncate max-w-[150px]">{pdf.name}</span>
+                            <button
+                              onClick={() => removePdf(index)}
+                              className="text-neutral-500 hover:text-rose-500 transition-colors"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          onClick={() => pdfInputRef.current?.click()}
+                          className="flex items-center space-x-2 bg-neutral-900/50 hover:bg-neutral-800 border-2 border-dashed border-neutral-700 hover:border-blue-500 px-4 py-2 rounded-xl text-neutral-500 hover:text-blue-400 transition-all cursor-pointer"
+                        >
+                          <Plus className="w-5 h-5" />
+                          <span className="text-sm font-medium">Add PDF</span>
+                          <input
+                            type="file"
+                            ref={pdfInputRef}
+                            onChange={handlePdfSelection}
+                            className="hidden"
+                            accept=".pdf"
+                            multiple
+                          />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="space-y-4">
-                  <h4 className="text-sm font-semibold uppercase tracking-wider text-neutral-500">Available Placeholders</h4>
-                  <div className="bg-neutral-900/50 rounded-2xl p-4 border border-neutral-800/50 space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
-                    {headers.length > 0 ? (
-                      headers.map((header) => (
-                        <button
-                          key={header}
-                          onClick={() => insertPlaceholder(header)}
-                          className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-sm transition-colors group"
-                        >
-                          <span className="font-mono text-blue-400">{`{${header}}`}</span>
-                          <Plus className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </button>
-                      ))
-                    ) : (
-                      <p className="text-xs text-neutral-600 italic">No data loaded.</p>
-                    )}
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-semibold uppercase tracking-wider text-neutral-500">Available Placeholders</h4>
+                    <div className="bg-neutral-900/50 rounded-2xl p-4 border border-neutral-800/50 space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+                      {headers.length > 0 ? (
+                        headers.map((header) => (
+                          <button
+                            key={header}
+                            onClick={() => insertPlaceholder(header)}
+                            className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-sm transition-colors group"
+                          >
+                            <span className="font-mono text-blue-400">{`{${header}}`}</span>
+                            <Plus className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </button>
+                        ))
+                      ) : (
+                        <p className="text-xs text-neutral-600 italic">No data loaded.</p>
+                      )}
+                    </div>
+
+                    <button
+                      disabled={isSending || rows.length === 0}
+                      onClick={handleSendEmails}
+                      className="w-full mt-8 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-500/20 flex items-center justify-center space-x-3 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      {isSending ? (
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                      ) : (
+                        <>
+                          <Send className="w-5 h-5" />
+                          <span>Send to {rows.length} Recipients</span>
+                        </>
+                      )}
+                    </button>
                   </div>
-
-                  <button
-                    disabled={isSending || rows.length === 0}
-                    onClick={handleSendEmails}
-                    className="w-full mt-8 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-500/20 flex items-center justify-center space-x-3 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                  >
-                    {isSending ? (
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                    ) : (
-                      <>
-                        <Send className="w-5 h-5" />
-                        <span>Send to {rows.length} Recipients</span>
-                      </>
-                    )}
-                  </button>
                 </div>
               </div>
             </motion.div>

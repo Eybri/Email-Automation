@@ -27,7 +27,8 @@ export class EmailService {
             Object.keys(recipient).forEach((key) => {
                 // Escape key for RegExp in case it contains special characters
                 const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const placeholder = new RegExp(`{${escapedKey}}`, 'g');
+                // Use case-insensitive 'gi' and allow spaces inside curly braces: {\s*key\s*}
+                const placeholder = new RegExp(`{\\s*${escapedKey}\\s*}`, 'gi');
 
                 // Use ?? to allow numeric 0 as a valid value
                 const value = String(recipient[key] ?? '');

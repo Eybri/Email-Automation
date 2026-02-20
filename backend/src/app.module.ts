@@ -5,6 +5,8 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { EmailModule } from './email/email.module';
 import { ExcelModule } from './excel/excel.module';
+import { FirebaseModule } from './firebase/firebase.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -30,6 +32,8 @@ import { ExcelModule } from './excel/excel.module';
       }),
       inject: [ConfigService],
     }),
+    FirebaseModule,
+    AuthModule,
     EmailModule,
     ExcelModule,
   ],

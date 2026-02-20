@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import axios from "axios";
 import {
   Upload,
@@ -13,15 +14,18 @@ import {
   Plus,
   LucideIcon,
   FileText,
-  X
+  X,
+  LogOut,
+  User,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "../context/auth-context";
 
 const ReactQuill = dynamic(() => import("react-quill-new"), { ssr: false });
 import "react-quill-new/dist/quill.snow.css";
 
-const API_BASE_URL = "http://localhost:3001";
+const API_BASE_URL = "http://localhost:5000";
 
 type Tab = "upload" | "editor" | "preview";
 
@@ -50,6 +54,9 @@ const TABS: TabItem[] = [
 ];
 
 export default function Dashboard() {
+  const { user, loading, signOut, getIdToken } = useAuth();
+  const router = useRouter();
+
   const [file, setFile] = useState<File | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<RecipientData[]>([]);
@@ -64,6 +71,19 @@ export default function Dashboard() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
+  // Route protection: redirect to login if not authenticated
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push("/login");
+    }
+  }, [user, loading, router]);
+
+  // Helper to get auth headers
+  const getAuthHeaders = async () => {
+    const token = await getIdToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = e.target.files?.[0];
     if (!uploadedFile) return;
@@ -75,12 +95,19 @@ export default function Dashboard() {
     formData.append("file", uploadedFile);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/email/upload`, formData);
+      const authHeaders = await getAuthHeaders();
+      const response = await axios.post(`${API_BASE_URL}/email/upload`, formData, {
+        headers: { ...authHeaders },
+      });
       setHeaders(response.data.headers);
       setRows(response.data.rows);
       setActiveTab("editor");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Upload failed", error);
+      if (error.response?.status === 401) {
+        router.push("/login");
+        return;
+      }
       alert("Failed to upload and parse Excel file.");
     } finally {
       setIsUploading(false);
@@ -121,15 +148,21 @@ export default function Dashboard() {
     });
 
     try {
+      const authHeaders = await getAuthHeaders();
       const response = await axios.post(`${API_BASE_URL}/email/send`, formData, {
         headers: {
           "Content-Type": "multipart/form-data",
+          ...authHeaders,
         },
       });
       setResults(response.data.results);
       setActiveTab("preview");
     } catch (error: any) {
       console.error("Sending failed", error);
+      if (error.response?.status === 401) {
+        router.push("/login");
+        return;
+      }
       const msg = error.response?.data?.message || (error.response?.data?.error ? `${error.response.data.error}: ${error.response.data.message || ''}` : error.message);
       alert(`Failed to send emails: ${msg}`);
     } finally {
@@ -137,17 +170,66 @@ export default function Dashboard() {
     }
   };
 
+  const handleSignOut = async () => {
+    await signOut();
+    router.push("/login");
+  };
+
+  // Show loading while checking auth state
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500" />
+      </div>
+    );
+  }
+
+  // Don't render dashboard if not authenticated
+  if (!user) return null;
+
   return (
     <div className="max-w-6xl mx-auto p-8">
-      <header className="mb-12 text-center">
-        <motion.h1
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-5xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 mb-4"
-        >
-          Email Seeder Pro
-        </motion.h1>
-        <p className="text-neutral-400 text-lg">Automate your outreach with precision and style.</p>
+      <header className="mb-12">
+        {/* User bar */}
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-3">
+            {user.photoURL ? (
+              <img
+                src={user.photoURL}
+                alt="Avatar"
+                className="w-10 h-10 rounded-full border-2 border-neutral-700"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center">
+                <User className="w-5 h-5 text-white" />
+              </div>
+            )}
+            <div>
+              <p className="text-sm font-medium text-neutral-200">
+                {user.displayName || "User"}
+              </p>
+              <p className="text-xs text-neutral-500">{user.email}</p>
+            </div>
+          </div>
+          <button
+            onClick={handleSignOut}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-400 hover:text-rose-400 transition-all text-sm"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Sign Out</span>
+          </button>
+        </div>
+
+        <div className="text-center">
+          <motion.h1
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-5xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 mb-4"
+          >
+            Email Seeder Pro
+          </motion.h1>
+          <p className="text-neutral-400 text-lg">Automate your outreach with precision and style.</p>
+        </div>
       </header>
 
       {/* Tabs */}
@@ -352,7 +434,7 @@ export default function Dashboard() {
       </main>
 
       <footer className="mt-12 text-center text-neutral-600 text-sm">
-        &copy; 2026 Email Seeder Pro | Powered by NestJS & Next.js
+        &copy; 2026 Email Seeder Pro | Powered by NestJS &amp; Next.js
       </footer>
 
       <style jsx global>{`

@@ -1,9 +1,11 @@
-import { Controller, Post, UseInterceptors, UploadedFiles, Body, BadRequestException, Logger } from '@nestjs/common';
+import { Controller, Post, UseInterceptors, UploadedFiles, Body, BadRequestException, Logger, UseGuards, Req } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ExcelService } from '../excel/excel.service';
 import { EmailService } from './email.service';
+import { FirebaseAuthGuard } from '../auth/firebase-auth.guard';
 
 @Controller('email')
+@UseGuards(FirebaseAuthGuard)
 export class EmailController {
     private readonly logger = new Logger(EmailController.name);
 
@@ -14,11 +16,15 @@ export class EmailController {
 
     @Post('upload')
     @UseInterceptors(FilesInterceptor('file'))
-    async uploadFile(@UploadedFiles() files: Express.Multer.File[]) {
+    async uploadFile(
+        @UploadedFiles() files: Express.Multer.File[],
+        @Req() req: any,
+    ) {
         const file = files?.[0];
         if (!file) {
             throw new BadRequestException('No file uploaded');
         }
+        this.logger.log(`Upload by user: ${req.user?.email}`);
         return this.excelService.parseExcel(file.buffer);
     }
 
@@ -29,8 +35,9 @@ export class EmailController {
     async sendEmails(
         @Body() body: { template: string; subject: string; recipients: string },
         @UploadedFiles() attachments: Express.Multer.File[],
+        @Req() req: any,
     ) {
-        this.logger.log(`Received send request. Subject: ${body.subject}`);
+        this.logger.log(`Send request by user: ${req.user?.email} | Subject: ${body.subject}`);
 
         if (!body || !body.template || !body.subject || !body.recipients) {
             this.logger.error('Missing required fields', body);

@@ -14,6 +14,7 @@ import {
   Plus,
   LucideIcon,
   FileText,
+  Image as ImageIcon,
   X,
   LogOut,
   User,
@@ -62,7 +63,7 @@ export default function Dashboard() {
   const [rows, setRows] = useState<RecipientData[]>([]);
   const [subject, setSubject] = useState("");
   const [template, setTemplate] = useState("");
-  const [pdfFiles, setPdfFiles] = useState<File[]>([]);
+  const [attachments, setAttachments] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [results, setResults] = useState<SendResult[] | null>(null);
@@ -71,7 +72,7 @@ export default function Dashboard() {
   const [editingCell, setEditingCell] = useState<{ row: number; col: string } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
 
   // Route protection: redirect to login if not authenticated
   useEffect(() => {
@@ -116,14 +117,14 @@ export default function Dashboard() {
     }
   };
 
-  const handlePdfSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    setPdfFiles((prev) => [...prev, ...files]);
-    if (pdfInputRef.current) pdfInputRef.current.value = "";
+    setAttachments((prev) => [...prev, ...files]);
+    if (attachmentInputRef.current) attachmentInputRef.current.value = "";
   };
 
-  const removePdf = (index: number) => {
-    setPdfFiles((prev) => prev.filter((_, i) => i !== index));
+  const removeAttachment = (index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
   const insertPlaceholder = (header: string) => {
@@ -181,7 +182,7 @@ export default function Dashboard() {
     formData.append("template", template);
     formData.append("recipients", JSON.stringify(getRecipientsWithFallbacks()));
 
-    pdfFiles.forEach((file) => {
+    attachments.forEach((file) => {
       formData.append("attachments", file);
     });
 
@@ -454,16 +455,20 @@ export default function Dashboard() {
                       </div>
                     </div>
 
-                    {/* PDF Attachments Section */}
+                    {/* Attachments Section */}
                     <div className="pt-8">
-                      <label className="block text-sm font-medium text-neutral-400 mb-4">PDF Attachments</label>
+                      <label className="block text-sm font-medium text-neutral-400 mb-4">Attachments</label>
                       <div className="flex flex-wrap gap-4">
-                        {pdfFiles.map((pdf, index) => (
+                        {attachments.map((file, index) => (
                           <div key={index} className="flex items-center space-x-2 bg-neutral-900 px-4 py-2 rounded-xl group relative border border-neutral-800">
-                            <FileText className="w-5 h-5 text-rose-500" />
-                            <span className="text-sm truncate max-w-[150px]">{pdf.name}</span>
+                            {file.type.startsWith('image/') ? (
+                              <ImageIcon className="w-5 h-5 text-blue-400" />
+                            ) : (
+                              <FileText className="w-5 h-5 text-rose-500" />
+                            )}
+                            <span className="text-sm truncate max-w-[150px]">{file.name}</span>
                             <button
-                              onClick={() => removePdf(index)}
+                              onClick={() => removeAttachment(index)}
                               className="text-neutral-500 hover:text-rose-500 transition-colors"
                             >
                               <X className="w-4 h-4" />
@@ -471,17 +476,17 @@ export default function Dashboard() {
                           </div>
                         ))}
                         <button
-                          onClick={() => pdfInputRef.current?.click()}
+                          onClick={() => attachmentInputRef.current?.click()}
                           className="flex items-center space-x-2 bg-neutral-900/50 hover:bg-neutral-800 border-2 border-dashed border-neutral-700 hover:border-blue-500 px-4 py-2 rounded-xl text-neutral-500 hover:text-blue-400 transition-all cursor-pointer"
                         >
                           <Plus className="w-5 h-5" />
-                          <span className="text-sm font-medium">Add PDF</span>
+                          <span className="text-sm font-medium">Add Attachment</span>
                           <input
                             type="file"
-                            ref={pdfInputRef}
-                            onChange={handlePdfSelection}
+                            ref={attachmentInputRef}
+                            onChange={handleFileSelection}
                             className="hidden"
-                            accept=".pdf"
+                            accept=".pdf, image/jpeg, image/png, image/gif"
                             multiple
                           />
                         </button>

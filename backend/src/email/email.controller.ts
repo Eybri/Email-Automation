@@ -52,6 +52,14 @@ export class EmailController {
             throw new BadRequestException('Invalid recipients format. Expected JSON string.');
         }
 
+        // Validate total attachment size (SMTP limits)
+        const totalSize = attachments.reduce((sum, file) => sum + file.size, 0);
+        const MAX_TOTAL_SIZE = 20 * 1024 * 1024; // 20MB
+        if (totalSize > MAX_TOTAL_SIZE) {
+            this.logger.error(`Total attachment size too large: ${(totalSize / 1024 / 1024).toFixed(2)}MB`);
+            throw new BadRequestException(`Total attachment size exceeds the 20MB limit. Current size: ${(totalSize / 1024 / 1024).toFixed(2)}MB`);
+        }
+
         const results = await this.emailService.sendBulkEmails(
             body.template,
             body.subject,

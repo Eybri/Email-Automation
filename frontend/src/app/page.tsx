@@ -493,21 +493,21 @@ export default function Dashboard() {
                       </div>
                     </div>
 
-                    <div className="overflow-x-auto rounded-xl border border-neutral-800 custom-scrollbar">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-neutral-800 bg-neutral-900/80">
-                            <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-500 w-10">#</th>
+                    <div className="max-h-[400px] overflow-auto rounded-xl border border-neutral-800 custom-scrollbar relative">
+                      <table className="w-full text-sm border-separate border-spacing-0">
+                        <thead className="sticky top-0 z-20">
+                          <tr className="bg-neutral-900 shadow-sm">
+                            <th className="sticky left-0 z-30 bg-neutral-900 px-3 py-2 text-left text-xs font-semibold text-neutral-500 border-b border-neutral-800 w-10">#</th>
                             {headers.map((h) => (
-                              <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-neutral-400">{h}</th>
+                              <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-neutral-400 border-b border-neutral-800">{h}</th>
                             ))}
                           </tr>
                           {/* Fallback input row */}
                           {columnsWithEmptyCells.length > 0 && (
-                            <tr className="border-b border-amber-500/20 bg-amber-500/5">
-                              <td className="px-3 py-2 text-xs text-amber-500 font-medium">↳</td>
+                            <tr className="bg-amber-500/10 backdrop-blur-sm">
+                              <td className="sticky left-0 z-30 bg-amber-900/20 px-3 py-2 text-xs text-amber-500 font-medium border-b border-amber-500/20">↳</td>
                               {headers.map((h) => (
-                                <td key={h} className="px-2 py-1.5">
+                                <td key={h} className="px-2 py-1.5 border-b border-amber-500/20">
                                   {columnsWithEmptyCells.includes(h) ? (
                                     <input
                                       type="text"
@@ -524,17 +524,17 @@ export default function Dashboard() {
                             </tr>
                           )}
                         </thead>
-                        <tbody>
-                          {rows.slice(0, 20).map((row, idx) => (
-                            <tr key={idx} className="border-b border-neutral-800/50 hover:bg-neutral-800/30 transition-colors">
-                              <td className="px-3 py-2 text-xs text-neutral-600">{idx + 1}</td>
+                        <tbody className="bg-neutral-900/10">
+                          {rows.map((row, idx) => (
+                            <tr key={idx} className="border-b border-neutral-800/50 hover:bg-neutral-800/30 transition-colors group">
+                              <td className="sticky left-0 z-10 bg-neutral-900/95 group-hover:bg-neutral-800/95 px-3 py-2 text-xs text-neutral-600 border-b border-neutral-800/50">{idx + 1}</td>
                               {headers.map((h) => {
                                 const cell = getCellDisplay(row, h);
                                 const isEditing = editingCell?.row === idx && editingCell?.col === h;
                                 return (
                                   <td
                                     key={h}
-                                    className={`text-xs cursor-pointer ${isEditing
+                                    className={`text-xs cursor-pointer border-b border-neutral-800/50 ${isEditing
                                       ? "p-0"
                                       : `px-3 py-2 ${cell.isFallback
                                         ? "text-amber-400/70 italic bg-amber-500/5"
@@ -567,11 +567,6 @@ export default function Dashboard() {
                           ))}
                         </tbody>
                       </table>
-                      {rows.length > 20 && (
-                        <div className="text-center py-2 text-xs text-neutral-600 bg-neutral-900/50">
-                          Showing 20 of {rows.length} rows
-                        </div>
-                      )}
                     </div>
                   </div>
                 )}

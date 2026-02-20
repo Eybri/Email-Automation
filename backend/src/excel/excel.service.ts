@@ -13,7 +13,7 @@ export class ExcelService {
         const data = XLSX.utils.sheet_to_json(worksheet, { defval: '' }) as any[];
 
         if (data.length === 0) {
-            return { headers: [], rows: [] };
+            return { headers: [], rows: [], emailColumn: null };
         }
 
         // Get headers from the full set of keys across ALL rows
@@ -25,7 +25,39 @@ export class ExcelService {
             }
         }
         const headers = Array.from(headerSet);
+        const emailColumn = this.findEmailColumn(headers, data);
 
-        return { headers, rows: data };
+        return { headers, rows: data, emailColumn };
+    }
+
+    private findEmailColumn(headers: string[], rows: any[]): string | null {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+        // 1. Check for exact matches (case-insensitive)
+        const exactMatches = ['email', 'e-mail', 'mailto', 'recipient', 'to', 'address', 'email address'];
+        for (const header of headers) {
+            const h = header.toLowerCase().trim();
+            if (exactMatches.includes(h)) return header;
+        }
+
+        // 2. Check for partial matches
+        for (const header of headers) {
+            const h = header.toLowerCase();
+            if (h.includes('email') || h.includes('mail')) return header;
+        }
+
+        // 3. Test content of the first few rows
+        if (rows.length > 0) {
+            const samples = rows.slice(0, 10);
+            for (const header of headers) {
+                const isEmailColumn = samples.some(row => {
+                    const val = String(row[header] || '').trim();
+                    return emailRegex.test(val);
+                });
+                if (isEmailColumn) return header;
+            }
+        }
+
+        return null;
     }
 }

@@ -63,6 +63,7 @@ export default function Dashboard() {
   const [file, setFile] = useState<File | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<RecipientData[]>([]);
+  const [detectedEmailColumn, setDetectedEmailColumn] = useState<string | null>(null);
   const [subject, setSubject] = useState("");
   const [template, setTemplate] = useState("");
   const [remoteUrl, setRemoteUrl] = useState("");
@@ -121,6 +122,7 @@ export default function Dashboard() {
       });
       setHeaders(response.data.headers);
       setRows(response.data.rows);
+      setDetectedEmailColumn(response.data.emailColumn);
       setStartRow(1);
       setEndRow(response.data.rows.length);
       setActiveTab("editor");
@@ -155,6 +157,7 @@ export default function Dashboard() {
       );
       setHeaders(response.data.headers);
       setRows(response.data.rows);
+      setDetectedEmailColumn(response.data.emailColumn);
       setStartRow(1);
       setEndRow(response.data.rows.length);
       setRemoteUrl(""); // Clear after success
@@ -276,7 +279,7 @@ export default function Dashboard() {
 
           batchResults.forEach(res => {
             const statusIcon = res.status === 'sent' ? '✅' : '❌';
-            const logMsg = `${statusIcon} ${res.status === 'sent' ? 'Sent' : 'Failed'}: ${res.email}${res.error ? ` (${res.error})` : ''}`;
+            const logMsg = `${statusIcon} ${res.status === 'sent' ? 'Sent' : 'Failed'}: ${res.email || 'Unknown'}${res.error ? ` (${res.error})` : ''}`;
             setSendingLogs(prev => [...prev, logMsg]);
           });
 
@@ -530,7 +533,14 @@ export default function Dashboard() {
                           <tr className="bg-neutral-900 shadow-sm">
                             <th className="sticky left-0 z-30 bg-neutral-900 px-3 py-2 text-left text-xs font-semibold text-neutral-500 border-b border-neutral-800 w-10">#</th>
                             {headers.map((h) => (
-                              <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-neutral-400 border-b border-neutral-800">{h}</th>
+                              <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-neutral-400 border-b border-neutral-800">
+                                <div className="flex items-center gap-1">
+                                  {h}
+                                  {h === detectedEmailColumn && (
+                                    <span className="bg-blue-500/20 text-blue-400 text-[8px] px-1 rounded border border-blue-500/30 uppercase tracking-tighter">Email</span>
+                                  )}
+                                </div>
+                              </th>
                             ))}
                           </tr>
                           {/* Fallback input row */}

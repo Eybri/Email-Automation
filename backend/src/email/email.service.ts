@@ -37,15 +37,33 @@ export class EmailService {
             });
 
             try {
+                // Find the email address in the recipient object
+                const emailAddress = recipient.email || recipient.Email || (() => {
+                    const emailKey = Object.keys(recipient).find(key => {
+                        const val = String(recipient[key] || '').trim();
+                        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
+                    });
+                    if (emailKey) return recipient[emailKey];
+
+                    // Fallback: look for any key that looks like an email or contains an email
+                    const fallbackKey = Object.keys(recipient).find(k => k.toLowerCase().includes('email') || k.toLowerCase().includes('mail'));
+                    return fallbackKey ? recipient[fallbackKey] : null;
+                })();
+
+                if (!emailAddress) {
+                    throw new Error('No valid email address found for this recipient');
+                }
+
                 await this.mailerService.sendMail({
-                    to: recipient.email || recipient.Email,
+                    to: emailAddress,
                     subject: personalizedSubject,
                     html: personalizedBody,
                     attachments: mailAttachments,
                 });
-                results.push({ email: recipient.email || recipient.Email, status: 'sent' });
+                results.push({ email: emailAddress, status: 'sent' });
             } catch (error) {
-                results.push({ email: recipient.email || recipient.Email, status: 'failed', error: error.message });
+                const failedEmail = recipient.email || recipient.Email || 'Unknown';
+                results.push({ email: failedEmail, status: 'failed', error: error.message });
             }
         }
 

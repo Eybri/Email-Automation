@@ -1,5 +1,6 @@
 import { Controller, Post, UseInterceptors, UploadedFiles, Body, BadRequestException, Logger, UseGuards, Req } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
+import axios from 'axios';
 import { ExcelService } from '../excel/excel.service';
 import { EmailService } from './email.service';
 import { FirebaseAuthGuard } from '../auth/firebase-auth.guard';
@@ -26,6 +27,42 @@ export class EmailController {
         }
         this.logger.log(`Upload by user: ${req.user?.email}`);
         return this.excelService.parseExcel(file.buffer);
+    }
+
+    @Post('upload-url')
+    async uploadFileFromUrl(
+        @Body() body: { url: string },
+        @Req() req: any,
+    ) {
+        let url = body.url;
+        if (!url) {
+            throw new BadRequestException('URL is required');
+        }
+
+        this.logger.log(`URL Upload by user: ${req.user?.email} | URL: ${url}`);
+
+        // Handle Google Sheets links
+        if (url.includes('docs.google.com/spreadsheets')) {
+            // Extract the spreadsheet ID
+            const matches = url.match(/\/d\/(.*?)(\/|$)/);
+            if (matches && matches[1]) {
+                const sheetId = matches[1];
+                url = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=xlsx`;
+                this.logger.log(`Transformed Google Sheets URL to export URL: ${url}`);
+            }
+        }
+
+        try {
+            const response = await axios.get(url, {
+                responseType: 'arraybuffer',
+                timeout: 10000,
+            });
+            const buffer = Buffer.from(response.data);
+            return this.excelService.parseExcel(buffer);
+        } catch (error) {
+            this.logger.error(`Failed to fetch file from URL: ${error.message}`);
+            throw new BadRequestException(`Failed to fetch file from URL: ${error.message}. Please ensure the link is publicly accessible.`);
+        }
     }
 
     @Post('send')

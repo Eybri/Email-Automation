@@ -16,6 +16,8 @@ import {
   FileText,
   Image as ImageIcon,
   X,
+  Link,
+  CloudDownload,
   LogOut,
   User,
 } from "lucide-react";
@@ -63,6 +65,7 @@ export default function Dashboard() {
   const [rows, setRows] = useState<RecipientData[]>([]);
   const [subject, setSubject] = useState("");
   const [template, setTemplate] = useState("");
+  const [remoteUrl, setRemoteUrl] = useState("");
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -72,6 +75,13 @@ export default function Dashboard() {
   const [endRow, setEndRow] = useState(0);
   const [fallbackValues, setFallbackValues] = useState<Record<string, string>>({});
   const [editingCell, setEditingCell] = useState<{ row: number; col: string } | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const quillModules = {
+    clipboard: {
+      matchVisual: false,
+    },
+  };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
@@ -95,27 +105,66 @@ export default function Dashboard() {
 
     setFile(uploadedFile);
     setIsUploading(true);
+    setUploadError(null);
 
     const formData = new FormData();
-    formData.append("file", uploadedFile);
+    formData.append("files", uploadedFile);
 
     try {
-      const authHeaders = await getAuthHeaders();
+      const token = await user?.getIdToken();
       const response = await axios.post(`${API_BASE_URL}/email/upload`, formData, {
-        headers: { ...authHeaders },
+        headers: {
+          "Content-Type": "multipart/form-data",
+          Authorization: `Bearer ${token}`,
+        },
       });
       setHeaders(response.data.headers);
       setRows(response.data.rows);
       setStartRow(1);
       setEndRow(response.data.rows.length);
       setActiveTab("editor");
-    } catch (error: any) {
-      console.error("Upload failed", error);
-      if (error.response?.status === 401) {
+    } catch (err: any) {
+      console.error("Upload failed", err);
+      if (err.response?.status === 401) {
         router.push("/login");
         return;
       }
-      alert("Failed to upload and parse Excel file.");
+      setUploadError(err.response?.data?.message || "Failed to upload file");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleUrlUpload = async () => {
+    if (!remoteUrl.trim()) return;
+
+    setIsUploading(true);
+    setUploadError(null);
+
+    try {
+      const token = await user?.getIdToken();
+      const response = await axios.post(
+        `${API_BASE_URL}/email/upload-url`,
+        { url: remoteUrl },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      setHeaders(response.data.headers);
+      setRows(response.data.rows);
+      setStartRow(1);
+      setEndRow(response.data.rows.length);
+      setRemoteUrl(""); // Clear after success
+      setActiveTab("editor");
+    } catch (err: any) {
+      console.error("Upload failed", err);
+      if (err.response?.status === 401) {
+        router.push("/login");
+        return;
+      }
+      setUploadError(err.response?.data?.message || "Failed to fetch from URL");
     } finally {
       setIsUploading(false);
     }
@@ -308,20 +357,71 @@ export default function Dashboard() {
               exit={{ opacity: 0, x: -20 }}
               className="flex flex-col items-center justify-center h-full py-12"
             >
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full max-w-md border-2 border-dashed border-neutral-700 rounded-3xl p-12 text-center hover:border-blue-500 hover:bg-blue-500/5 cursor-pointer transition-all group"
-              >
-                <Upload className="w-16 h-16 mx-auto mb-6 text-neutral-600 group-hover:text-blue-400 group-hover:scale-110 transition-transform" />
-                <h3 className="text-xl font-semibold mb-2">Upload Excel File</h3>
-                <p className="text-neutral-500">Drag and drop your .xlsx file here, or click to browse.</p>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileUpload}
-                  className="hidden"
-                  accept=".xlsx"
-                />
+              {/* File Upload & URL */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-2xl">
+                {/* Local File */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider flex items-center gap-2">
+                    <Upload className="w-4 h-4" />
+                    Local Spreadsheet
+                  </h3>
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="h-40 border-2 border-dashed border-neutral-800 rounded-2xl flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-blue-500/50 hover:bg-blue-500/5 transition-all group relative overflow-hidden"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="w-12 h-12 rounded-full bg-neutral-900 flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <Upload className="w-6 h-6 text-neutral-400 group-hover:text-blue-400" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-medium text-neutral-300">Click to upload</p>
+                      <p className="text-xs text-neutral-500">Excel or CSV files</p>
+                    </div>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      accept=".xlsx,.xls,.csv"
+                    />
+                  </div>
+                </div>
+
+                {/* Remote URL */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider flex items-center gap-2">
+                    <Link className="w-4 h-4" />
+                    Cloud Link (Google Sheets)
+                  </h3>
+                  <div className="h-40 border-2 border-neutral-800 rounded-2xl p-6 flex flex-col justify-center gap-4 bg-neutral-900/50">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Paste shared link here..."
+                        value={remoteUrl}
+                        onChange={(e) => setRemoteUrl(e.target.value)}
+                        className="w-full bg-neutral-900 border border-neutral-700 rounded-xl px-4 py-3 text-sm text-neutral-200 focus:outline-none focus:border-blue-500/50 transition-colors pr-12"
+                      />
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <Link className="w-4 h-4 text-neutral-600" />
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleUrlUpload}
+                      disabled={isUploading || !remoteUrl.trim()}
+                      className="w-full h-12 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl flex items-center justify-center gap-2 text-sm font-semibold text-neutral-200 transition-all border border-neutral-700/50"
+                    >
+                      {isUploading ? (
+                        <div className="w-5 h-5 border-2 border-neutral-400 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <>
+                          <CloudDownload className="w-4 h-4" />
+                          Fetch Data
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {file && (
@@ -332,6 +432,7 @@ export default function Dashboard() {
                 </div>
               )}
               {isUploading && <p className="mt-4 text-blue-400 animate-pulse">Parsing data...</p>}
+              {uploadError && <p className="mt-4 text-rose-400">{uploadError}</p>}
             </motion.div>
           )}
 
@@ -494,6 +595,7 @@ export default function Dashboard() {
                           theme="snow"
                           value={template}
                           onChange={setTemplate}
+                          modules={quillModules}
                           style={{ height: '300px', background: 'transparent' }}
                         />
                       </div>
@@ -650,6 +752,10 @@ export default function Dashboard() {
         .ql-editor {
           min-height: 200px;
           color: #e5e5e5 !important;
+        }
+        .ql-editor * {
+          background-color: transparent !important;
+          color: inherit !important;
         }
         .ql-snow .ql-stroke {
           stroke: #999 !important;

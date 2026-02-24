@@ -97,11 +97,20 @@ export class EmailController {
             throw new BadRequestException(`Total attachment size exceeds the 20MB limit. Current size: ${(totalSize / 1024 / 1024).toFixed(2)}MB`);
         }
 
+        const googleAccessToken = req.headers['x-google-access-token'];
+        const userEmail = req.user?.email;
+
+        this.logger.log(`DEBUG: Backend received request. User: ${userEmail}, Token: ${googleAccessToken ? 'PRESENT' : 'MISSING'}`);
+
+        this.logger.log(`SMTP Request: User=${userEmail}, Token=${googleAccessToken ? 'PRESENT' : 'MISSING'}`);
+
         const results = await this.emailService.sendBulkEmails(
             body.template,
             body.subject,
             recipientsArr,
             attachments,
+            googleAccessToken,
+            userEmail,
         );
         return { results };
     }

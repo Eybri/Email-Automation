@@ -57,7 +57,7 @@ const TABS: TabItem[] = [
 ];
 
 export default function Dashboard() {
-  const { user, loading, signOut, getIdToken } = useAuth();
+  const { user, loading, signOut, getIdToken, googleAccessToken } = useAuth();
   const router = useRouter();
 
   const [file, setFile] = useState<File | null>(null);
@@ -254,7 +254,11 @@ export default function Dashboard() {
         const chunk = allRecipients.slice(i, i + BATCH_SIZE);
         const batchNum = Math.floor(i / BATCH_SIZE) + 1;
 
-        setSendingLogs(prev => [...prev, `[Batch ${batchNum}/${totalBatches}] Processing ${chunk.length} emails...`]);
+        setSendingLogs(prev => [
+          ...prev,
+          `[Batch ${batchNum}/${totalBatches}] Processing ${chunk.length} emails...`,
+          `DEBUG: Google Token: ${googleAccessToken ? 'OK' : 'MISSING'} | User: ${user?.email}`
+        ]);
 
         const formData = new FormData();
         formData.append("subject", subject);
@@ -270,6 +274,7 @@ export default function Dashboard() {
             headers: {
               ...authHeaders,
               "Content-Type": "multipart/form-data",
+              ...(googleAccessToken ? { "x-google-access-token": googleAccessToken } : {}),
             },
           });
 

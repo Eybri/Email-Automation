@@ -1,17 +1,45 @@
 import { Injectable } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
+import { ConfigService } from '@nestjs/config';
+import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class EmailService {
-    constructor(private readonly mailerService: MailerService) { }
+    constructor(
+        private readonly mailerService: MailerService,
+        private readonly configService: ConfigService,
+    ) { }
 
     async sendBulkEmails(
         template: string,
         subject: string,
         recipients: any[],
-        attachments: Express.Multer.File[] = []
+        attachments: Express.Multer.File[] = [],
+        googleAccessToken?: string,
+        userEmail?: string,
     ) {
         const results: any[] = [];
+        let transporter: any = null;
+
+        if (googleAccessToken && userEmail) {
+            console.log(`DEBUG: Initializing OAuth2 SMTP for user: ${userEmail}`);
+            console.log(`DEBUG: Access Token (start): ${googleAccessToken.substring(0, 10)}...`);
+
+            transporter = nodemailer.createTransport({
+                host: 'smtp.gmail.com',
+                port: 465,
+                secure: true,
+                debug: true,
+                logger: true,
+                auth: {
+                    type: 'OAuth2',
+                    user: userEmail,
+                    accessToken: googleAccessToken,
+                },
+            });
+        } else {
+            console.log('DEBUG: Falling back to default SMTP transporter');
+        }
 
         const mailAttachments = attachments.map(file => ({
             filename: file.originalname,
@@ -55,12 +83,22 @@ export class EmailService {
                     throw new Error('No valid email address found for this recipient');
                 }
 
-                await this.mailerService.sendMail({
-                    to: emailAddress,
-                    subject: personalizedSubject,
-                    html: personalizedBody,
-                    attachments: mailAttachments,
-                });
+                if (transporter) {
+                    await transporter.sendMail({
+                        from: userEmail,
+                        to: emailAddress,
+                        subject: personalizedSubject,
+                        html: personalizedBody,
+                        attachments: mailAttachments,
+                    });
+                } else {
+                    await this.mailerService.sendMail({
+                        to: emailAddress,
+                        subject: personalizedSubject,
+                        html: personalizedBody,
+                        attachments: mailAttachments,
+                    });
+                }
                 results.push({ email: emailAddress, status: 'sent' });
             } catch (error) {
                 const failedEmail = recipient.email || recipient.Email || 'Unknown';

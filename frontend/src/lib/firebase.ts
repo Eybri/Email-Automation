@@ -13,5 +13,6 @@ const firebaseConfig = {
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('https://mail.google.com/');
 
 export { app, auth, googleProvider };

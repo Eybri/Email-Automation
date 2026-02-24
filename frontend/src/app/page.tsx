@@ -35,7 +35,7 @@ const ReactQuill = dynamic(
 );
 import "react-quill-new/dist/quill.snow.css";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://email-automation-wz8k.vercel.app";
 
 type Tab = "upload" | "editor" | "preview";
 

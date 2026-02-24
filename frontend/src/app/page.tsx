@@ -106,6 +106,7 @@ export default function Dashboard() {
             node.className = 'placeholder-pill';
             node.innerText = `{${value.label}}`;
             node.setAttribute('contenteditable', 'false');
+            node.style.userSelect = 'none';
             return node;
           }
           static value(node: any) {
@@ -449,7 +450,7 @@ export default function Dashboard() {
             animate={{ opacity: 1, y: 0 }}
             className="text-5xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 mb-4"
           >
-            Email Seeder Pro
+            Email seeder Pro
           </motion.h1>
           <p className="text-neutral-400 text-lg">Automate your outreach with precision and style.</p>
         </div>
@@ -976,11 +977,13 @@ export default function Dashboard() {
           padding: 2px 8px;
           border-radius: 6px;
           margin: 0 4px;
-          font-weight: 700;
+          font-weight: inherit;
           display: inline-block;
           font-size: 0.9em;
           box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
           border: 1px solid rgba(255,255,255,0.2);
+          cursor: default;
+          user-select: none;
         }
       `}</style>
     </div>

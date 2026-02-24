@@ -4,7 +4,8 @@ import { useAuth } from "../../context/auth-context";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Mail, LogIn } from "lucide-react";
+import { Mail, LogIn, Mail as MailIcon } from "lucide-react";
+import Image from "next/image";
 
 export default function LoginPage() {
     const { user, loading, signInWithGoogle } = useAuth();
@@ -62,15 +63,21 @@ export default function LoginPage() {
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
                         transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-                        className="mx-auto w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30"
+                        className="mx-auto w-20 h-20 bg-neutral-900 rounded-3xl flex items-center justify-center shadow-lg shadow-black/20 p-1 border border-neutral-800"
                     >
-                        <Mail className="w-10 h-10 text-white" />
+                        <Image
+                            src="/logo.png"
+                            alt="Email seeder Pro Logo"
+                            width={80}
+                            height={80}
+                            className="rounded-2xl"
+                        />
                     </motion.div>
 
                     {/* Title */}
                     <div>
                         <h1 className="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 mb-2">
-                            Email Seeder Pro
+                            Email seeder Pro
                         </h1>
                         <p className="text-neutral-500 text-sm">
                             Sign in to automate your outreach

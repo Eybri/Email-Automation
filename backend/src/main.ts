@@ -3,7 +3,7 @@ import { AppModule } from './app.module';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { json, urlencoded } from 'express';
 
-async function bootstrap() {
+export async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // Increase payload limits for large Excel files and attachments
@@ -14,7 +14,23 @@ async function bootstrap() {
 
   const port = process.env.PORT ?? 3001;
   const logger = new Logger('Bootstrap');
-  await app.listen(port);
-  logger.log(`Backend is running on: http://localhost:${port}`);
+
+  // Only call listen if not in serverless environment
+  if (process.env.NODE_ENV !== 'production' || process.env.VERCEL !== '1') {
+    await app.listen(port);
+    logger.log(`Backend is running on: http://localhost:${port}`);
+  }
+
+  return app.getHttpAdapter().getInstance();
 }
-bootstrap();
+
+// For local development
+if (process.env.NODE_ENV !== 'production' || process.env.VERCEL !== '1') {
+  bootstrap();
+}
+
+// Default export for Vercel
+export default async (req: any, res: any) => {
+  const app = await bootstrap();
+  app(req, res);
+};

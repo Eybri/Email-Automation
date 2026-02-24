@@ -6,8 +6,11 @@ import { AuthProvider } from "../context/auth-context";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Email Seeder | Automate Your Outreach",
+  title: "Email seeder Pro | Automate Your Outreach",
   description: "Upload Excel files, personalize templates, and send automated emails with ease.",
+  icons: {
+    icon: "/logo.png",
+  },
 };
 
 export default function RootLayout({

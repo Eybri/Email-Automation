@@ -99,10 +99,14 @@ export class EmailService {
                         attachments: mailAttachments,
                     });
                 }
-                results.push({ email: emailAddress, status: 'sent' });
+                results.push({ email: emailAddress, status: 'sent', remarks: 'Email sent successfully' });
             } catch (error) {
-                const failedEmail = recipient.email || recipient.Email || 'Unknown';
-                results.push({ email: failedEmail, status: 'failed', error: error.message });
+                const failedEmail = recipient.email || recipient.Email || recipient.Email_Address || recipient.Mail || 'Unknown';
+                let remarks = error.message;
+                if (remarks.includes('No valid email address found')) {
+                    remarks = 'Email address not found';
+                }
+                results.push({ email: failedEmail, status: 'failed', remarks });
             }
         }
 

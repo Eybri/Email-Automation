@@ -25,7 +25,14 @@ import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../context/auth-context";
 
-const ReactQuill = dynamic(() => import("react-quill-new"), { ssr: false });
+const ReactQuill = dynamic(
+  async () => {
+    const { default: RQ } = await import("react-quill-new");
+    // eslint-disable-next-line react/display-name
+    return ({ forwardedRef, ...props }: any) => <RQ ref={forwardedRef} {...props} />;
+  },
+  { ssr: false }
+);
 import "react-quill-new/dist/quill.snow.css";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
@@ -35,13 +42,15 @@ type Tab = "upload" | "editor" | "preview";
 interface RecipientData {
   email?: string;
   Email?: string;
+  Status?: 'workable' | 'dropped' | 'closable';
+  Remarks?: string;
   [key: string]: any;
 }
 
 interface SendResult {
   email: string;
   status: 'sent' | 'failed';
-  error?: string;
+  remarks?: string;
 }
 
 interface TabItem {
@@ -78,6 +87,38 @@ export default function Dashboard() {
   const [editingCell, setEditingCell] = useState<{ row: number; col: string } | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [sendingLogs, setSendingLogs] = useState<string[]>([]);
+  const STATUS_OPTIONS: ('workable' | 'dropped' | 'closable')[] = ['workable', 'dropped', 'closable'];
+
+  const quillRef = useRef<any>(null);
+
+  useEffect(() => {
+    // Register custom placeholder blot
+    const registerPlaceholder = async () => {
+      try {
+        const { Quill } = await import("react-quill-new");
+        const Embed = Quill.import('blots/embed') as any;
+        class PlaceholderBlot extends Embed {
+          static blotName = 'placeholder';
+          static tagName = 'span';
+          static create(value: any) {
+            const node = super.create();
+            node.setAttribute('data-placeholder', value.label);
+            node.className = 'placeholder-pill';
+            node.innerText = `{${value.label}}`;
+            node.setAttribute('contenteditable', 'false');
+            return node;
+          }
+          static value(node: any) {
+            return { label: node.getAttribute('data-placeholder') };
+          }
+        }
+        Quill.register(PlaceholderBlot);
+      } catch (e) {
+        console.error("Failed to register Quill blot", e);
+      }
+    };
+    registerPlaceholder();
+  }, []);
 
   const quillModules = {
     clipboard: {
@@ -120,8 +161,19 @@ export default function Dashboard() {
           Authorization: `Bearer ${token}`,
         },
       });
-      setHeaders(response.data.headers);
-      setRows(response.data.rows);
+      const dataRows: RecipientData[] = response.data.rows.map((row: any) => ({
+        ...row,
+        Status: row.Status || 'workable',
+        Remarks: row.Remarks || ''
+      }));
+
+      setHeaders((prev) => {
+        const h = response.data.headers;
+        if (!h.includes("Status")) h.push("Status");
+        if (!h.includes("Remarks")) h.push("Remarks");
+        return [...h];
+      });
+      setRows(dataRows);
       setDetectedEmailColumn(response.data.emailColumn);
       setStartRow(1);
       setEndRow(response.data.rows.length);
@@ -155,8 +207,19 @@ export default function Dashboard() {
           },
         }
       );
-      setHeaders(response.data.headers);
-      setRows(response.data.rows);
+      const dataRows: RecipientData[] = response.data.rows.map((row: any) => ({
+        ...row,
+        Status: row.Status || 'workable',
+        Remarks: row.Remarks || ''
+      }));
+
+      setHeaders((prev) => {
+        const h = response.data.headers;
+        if (!h.includes("Status")) h.push("Status");
+        if (!h.includes("Remarks")) h.push("Remarks");
+        return [...h];
+      });
+      setRows(dataRows);
       setDetectedEmailColumn(response.data.emailColumn);
       setStartRow(1);
       setEndRow(response.data.rows.length);
@@ -185,8 +248,16 @@ export default function Dashboard() {
   };
 
   const insertPlaceholder = (header: string) => {
-    const placeholder = `{${header}}`;
-    setTemplate((prev) => prev + placeholder);
+    const quill = quillRef.current?.getEditor();
+    if (quill) {
+      const range = quill.getSelection(true);
+      quill.insertEmbed(range.index, 'placeholder', { label: header });
+      quill.setSelection(range.index + 1);
+    } else {
+      // Fallback if quill is not focused/ready
+      const placeholder = `{${header}}`;
+      setTemplate((prev) => prev + placeholder);
+    }
   };
 
   // Check if a cell value is empty
@@ -284,8 +355,23 @@ export default function Dashboard() {
 
           batchResults.forEach(res => {
             const statusIcon = res.status === 'sent' ? '✅' : '❌';
-            const logMsg = `${statusIcon} ${res.status === 'sent' ? 'Sent' : 'Failed'}: ${res.email || 'Unknown'}${res.error ? ` (${res.error})` : ''}`;
+            const logMsg = `${statusIcon} ${res.status === 'sent' ? 'Sent' : 'Failed'}: ${res.email || 'Unknown'}${res.remarks ? ` (${res.remarks})` : ''}`;
             setSendingLogs(prev => [...prev, logMsg]);
+
+            // Update the source data (rows) table automatically
+            setRows(prevRows => {
+              return prevRows.map(row => {
+                const rowEmail = row.email || row.Email || row.Email_Address || row.Mail;
+                if (rowEmail === res.email) {
+                  return {
+                    ...row,
+                    Status: res.status === 'sent' ? 'workable' : 'dropped',
+                    Remarks: res.remarks || ''
+                  };
+                }
+                return row;
+              });
+            });
           });
 
         } catch (batchErr: any) {
@@ -577,6 +663,24 @@ export default function Dashboard() {
                               {headers.map((h) => {
                                 const cell = getCellDisplay(row, h);
                                 const isEditing = editingCell?.row === idx && editingCell?.col === h;
+
+                                if (h === "Status") {
+                                  return (
+                                    <td key={h} className="px-3 py-1 border-b border-neutral-800/50">
+                                      <select
+                                        value={row[h] || "workable"}
+                                        onChange={(e) => updateCellValue(idx, h, e.target.value)}
+                                        className={`bg-neutral-900 border border-neutral-700/50 rounded px-2 py-0.5 text-[10px] focus:outline-none focus:border-blue-500 transition-colors ${row[h] === 'dropped' ? 'text-rose-400' : row[h] === 'closable' ? 'text-amber-400' : 'text-emerald-400'
+                                          }`}
+                                      >
+                                        {STATUS_OPTIONS.map(opt => (
+                                          <option key={opt} value={opt}>{opt}</option>
+                                        ))}
+                                      </select>
+                                    </td>
+                                  )
+                                }
+
                                 return (
                                   <td
                                     key={h}
@@ -633,6 +737,7 @@ export default function Dashboard() {
                       <label className="block text-sm font-medium text-neutral-400 mb-2">Email Body</label>
                       <div className="bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800">
                         <ReactQuill
+                          forwardedRef={quillRef}
                           theme="snow"
                           value={template}
                           onChange={setTemplate}
@@ -797,7 +902,7 @@ export default function Dashboard() {
                             <AlertCircle className="w-4 h-4 text-rose-500/60" />
                             <span className="text-sm text-neutral-300">{res.email}</span>
                           </div>
-                          {res.error && <span className="text-[10px] text-rose-400/70 ml-7 italic">{res.error}</span>}
+                          {res.remarks && <span className="text-[10px] text-rose-400/70 ml-7 italic">{res.remarks}</span>}
                         </div>
                       ))}
                       {results.filter(r => r.status === 'failed').length === 0 && (
@@ -864,6 +969,18 @@ export default function Dashboard() {
         }
         .ql-snow .ql-picker {
           color: #999 !important;
+        }
+        .placeholder-pill {
+          background-color: #3b82f6;
+          color: white;
+          padding: 2px 8px;
+          border-radius: 6px;
+          margin: 0 4px;
+          font-weight: 700;
+          display: inline-block;
+          font-size: 0.9em;
+          box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+          border: 1px solid rgba(255,255,255,0.2);
         }
       `}</style>
     </div>

@@ -158,7 +158,6 @@ export default function Dashboard() {
       const token = await user?.getIdToken();
       const response = await axios.post(`${API_BASE_URL}/email/upload`, formData, {
         headers: {
-          "Content-Type": "multipart/form-data",
           Authorization: `Bearer ${token}`,
         },
       });
@@ -432,7 +431,20 @@ export default function Dashboard() {
               <p className="text-sm font-medium text-neutral-200">
                 {user.displayName || "User"}
               </p>
-              <p className="text-xs text-neutral-500">{user.email}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-neutral-500">{user.email}</p>
+                {googleAccessToken ? (
+                  <span className="flex items-center gap-1 text-[10px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded-full border border-emerald-500/20">
+                    <CheckCircle2 className="w-2.5 h-2.5" />
+                    Gmail SMTP Active
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-[10px] bg-amber-500/10 text-amber-400 px-1.5 py-0.5 rounded-full border border-amber-500/20">
+                    <AlertCircle className="w-2.5 h-2.5" />
+                    Gmail SMTP Inactive (Sign out & in)
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <button

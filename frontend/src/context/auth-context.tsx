@@ -43,10 +43,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Hydrate token from sessionStorage on mount
         const savedToken = sessionStorage.getItem('google_access_token');
         if (savedToken) {
+            console.log("DEBUG: Hydrating Google Access Token from sessionStorage");
             setGoogleAccessToken(savedToken);
+        } else {
+            console.log("DEBUG: No Google Access Token found in sessionStorage");
         }
 
         const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+            console.log("DEBUG: Firebase Auth State Changed. User:", firebaseUser?.email);
             setUser(firebaseUser);
             setLoading(false);
         });
@@ -54,14 +58,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const signInWithGoogle = async () => {
+        console.log("DEBUG: Starting Google Sign-In with scopes/provider...");
         const result = await signInWithPopup(auth, googleProvider);
         const credential = GoogleAuthProvider.credentialFromResult(result);
         if (credential) {
             const token = credential.accessToken || null;
+            console.log("DEBUG: Google Sign-In Success. Token Present:", !!token);
             setGoogleAccessToken(token);
             if (token) {
                 sessionStorage.setItem('google_access_token', token);
             }
+        } else {
+            console.log("DEBUG: Google Sign-In Success but no credential found");
         }
     };
 

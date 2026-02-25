@@ -42,8 +42,6 @@ type Tab = "upload" | "editor" | "preview";
 interface RecipientData {
   email?: string;
   Email?: string;
-  Status?: 'workable' | 'dropped' | 'closable';
-  Remarks?: string;
   [key: string]: any;
 }
 
@@ -87,9 +85,38 @@ export default function Dashboard() {
   const [editingCell, setEditingCell] = useState<{ row: number; col: string } | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [sendingLogs, setSendingLogs] = useState<string[]>([]);
-  const STATUS_OPTIONS: ('workable' | 'dropped' | 'closable')[] = ['workable', 'dropped', 'closable'];
 
   const quillRef = useRef<any>(null);
+
+  // Expose quill instance globally for the PlaceholderBlot to access
+  useEffect(() => {
+    if (quillRef.current) {
+      const quill = quillRef.current.getEditor();
+      // @ts-ignore
+      window.quillInstance = quill;
+
+      // Handle highlighting of selected pills
+      const handleSelectionChange = (range: any) => {
+        // Remove selection class from all pills first
+        document.querySelectorAll('.placeholder-pill').forEach(p => p.classList.remove('is-selected'));
+
+        if (range && range.length === 1) {
+          const [leaf] = quill.getLeaf(range.index);
+          const node = leaf?.domNode;
+          if (node && node.classList && node.classList.contains('placeholder-pill')) {
+            node.classList.add('is-selected');
+          }
+        }
+      };
+
+      quill.on('selection-change', handleSelectionChange);
+      return () => {
+        quill.off('selection-change', handleSelectionChange);
+        // @ts-ignore
+        delete window.quillInstance;
+      };
+    }
+  }, [quillRef.current]);
 
   useEffect(() => {
     // Register custom placeholder blot
@@ -107,6 +134,21 @@ export default function Dashboard() {
             node.innerText = `{${value.label}}`;
             node.setAttribute('contenteditable', 'false');
             node.style.userSelect = 'none';
+
+            // Click to select/scope the pill
+            node.onclick = (e: MouseEvent) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const quill = (window as any).quillInstance;
+              if (quill) {
+                const blot = Quill.find(node);
+                if (blot) {
+                  const index = (quill as any).getIndex(blot);
+                  quill.setSelection(index, 1, 'user');
+                }
+              }
+            };
+
             return node;
           }
           static value(node: any) {
@@ -161,16 +203,10 @@ export default function Dashboard() {
           Authorization: `Bearer ${token}`,
         },
       });
-      const dataRows: RecipientData[] = response.data.rows.map((row: any) => ({
-        ...row,
-        Status: row.Status || 'workable',
-        Remarks: row.Remarks || ''
-      }));
+      const dataRows: RecipientData[] = response.data.rows;
 
       setHeaders((prev) => {
         const h = response.data.headers;
-        if (!h.includes("Status")) h.push("Status");
-        if (!h.includes("Remarks")) h.push("Remarks");
         return [...h];
       });
       setRows(dataRows);
@@ -207,16 +243,10 @@ export default function Dashboard() {
           },
         }
       );
-      const dataRows: RecipientData[] = response.data.rows.map((row: any) => ({
-        ...row,
-        Status: row.Status || 'workable',
-        Remarks: row.Remarks || ''
-      }));
+      const dataRows: RecipientData[] = response.data.rows;
 
       setHeaders((prev) => {
         const h = response.data.headers;
-        if (!h.includes("Status")) h.push("Status");
-        if (!h.includes("Remarks")) h.push("Remarks");
         return [...h];
       });
       setRows(dataRows);
@@ -358,20 +388,6 @@ export default function Dashboard() {
             const logMsg = `${statusIcon} ${res.status === 'sent' ? 'Sent' : 'Failed'}: ${res.email || 'Unknown'}${res.remarks ? ` (${res.remarks})` : ''}`;
             setSendingLogs(prev => [...prev, logMsg]);
 
-            // Update the source data (rows) table automatically
-            setRows(prevRows => {
-              return prevRows.map(row => {
-                const rowEmail = row.email || row.Email || row.Email_Address || row.Mail;
-                if (rowEmail === res.email) {
-                  return {
-                    ...row,
-                    Status: res.status === 'sent' ? 'workable' : 'dropped',
-                    Remarks: res.remarks || ''
-                  };
-                }
-                return row;
-              });
-            });
           });
 
         } catch (batchErr: any) {
@@ -677,22 +693,6 @@ export default function Dashboard() {
                                 const cell = getCellDisplay(row, h);
                                 const isEditing = editingCell?.row === idx && editingCell?.col === h;
 
-                                if (h === "Status") {
-                                  return (
-                                    <td key={h} className="px-3 py-1 border-b border-neutral-800/50">
-                                      <select
-                                        value={row[h] || "workable"}
-                                        onChange={(e) => updateCellValue(idx, h, e.target.value)}
-                                        className={`bg-neutral-900 border border-neutral-700/50 rounded px-2 py-0.5 text-[10px] focus:outline-none focus:border-blue-500 transition-colors ${row[h] === 'dropped' ? 'text-rose-400' : row[h] === 'closable' ? 'text-amber-400' : 'text-emerald-400'
-                                          }`}
-                                      >
-                                        {STATUS_OPTIONS.map(opt => (
-                                          <option key={opt} value={opt}>{opt}</option>
-                                        ))}
-                                      </select>
-                                    </td>
-                                  )
-                                }
 
                                 return (
                                   <td
@@ -974,6 +974,12 @@ export default function Dashboard() {
           background-color: transparent !important;
           color: inherit !important;
         }
+        .ql-editor u {
+          text-decoration: underline !important;
+          text-underline-offset: 3px;
+          text-decoration-thickness: 1.5px;
+          text-decoration-color: #3b82f6 !important;
+        }
         .ql-snow .ql-stroke {
           stroke: #999 !important;
         }
@@ -986,16 +992,44 @@ export default function Dashboard() {
         .placeholder-pill {
           background-color: #3b82f6;
           color: white;
-          padding: 2px 8px;
-          border-radius: 6px;
+          padding: 2px 10px;
+          border-radius: 8px;
           margin: 0 4px;
           font-weight: inherit;
           display: inline-block;
           font-size: 0.9em;
           box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
           border: 1px solid rgba(255,255,255,0.2);
-          cursor: default;
+          cursor: pointer;
           user-select: none;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          vertical-align: middle;
+        }
+        .placeholder-pill:hover {
+          background-color: #2563eb;
+          box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+          transform: translateY(-1px);
+        }
+        /* Visual feedback when the pill is bolded or underlined in the editor */
+        strong .placeholder-pill, b .placeholder-pill {
+          background-color: #1d4ed8;
+          border-color: rgba(255,255,255,0.8);
+          box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5), 0 4px 15px rgba(29, 78, 216, 0.6);
+          transform: scale(1.05);
+          font-weight: 800;
+        }
+        u .placeholder-pill {
+          text-decoration: underline !important;
+          text-decoration-color: white !important;
+          text-underline-offset: 4px;
+        }
+        /* Selection state visibility */
+        .placeholder-pill:active, .placeholder-pill:focus, .placeholder-pill.is-selected {
+          outline: 2px solid #60a5fa;
+          outline-offset: 3px;
+          background-color: #2563eb;
+          box-shadow: 0 0 15px rgba(59, 130, 246, 0.6);
+          transform: scale(1.02);
         }
       `}</style>
     </div>
